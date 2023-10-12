@@ -1,0 +1,10 @@
+export ENV=prod
+export AWS_PROFILE=xxxx
+export STACK_NAME="your-stackname-static"
+export DOMAIN_NAME="static.your.domain"
+export ALTERNATIVE_DOMAIN_NAME="static2.your.domain"
+export SOURCE_DIR="../<app_source_dir>/frontend"
+export S3_BUCKET="s3://<your-app>-static-bucket-xxxx"
+
+# Activate this after setting up CloudFront
+# export CLOUDFRONT_DIST_ID=XXXX

@@ -1,0 +1,38 @@
+#!/bin/bash 
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: bin/cfn_update_stack <env_file>"
+    exit -1
+fi
+
+source $1
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+cd $DIR
+
+CFN_YML_FILE="../cfn/cloudformation-template-s3-cloudfront-ssl.yml"
+CFN_YML=file://${CFN_YML_FILE}
+
+# Confirmation
+read -p "Update the stack $STACK_NAME. Are you sure? " -n 1 -r
+echo    # (optional) move to a new line
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    echo "bye!"
+    exit 0
+fi
+
+aws cloudformation update-stack \
+    --profile $AWS_PROFILE \
+    --stack-name $STACK_NAME  \
+    --template-body $CFN_YML \
+    --capabilities CAPABILITY_IAM \
+    --parameters \
+    ParameterKey=DomainName,ParameterValue=$DOMAIN_NAME \
+    ParameterKey=AlternativeDomainName,ParameterValue=$ALTERNATIVE_DOMAIN_NAME \
+    ParameterKey=StackName,ParameterValue=$STACK_NAME
+
+aws cloudformation wait stack-update-complete --profile $AWS_PROFILE --stack-name $STACK_NAME
+
+# To delete the stack:
+# aws cloudformation delete-stack --stack-name $STACK_NAME

@@ -1,0 +1,138 @@
+# This CloudFormation template is based on 
+# https://medium.com/sovtech-insights/creating-a-cloudformation-script-to-host-a-static-site-on-s3-cloudfront-ssl-f9781c30e93c
+# https://gist.github.com/jonoirwinrsa/ceb2cba3d104720320f30e06b8c821f8
+# Thank you @jonoirwinrsa
+
+Description: >
+  Script to create a SSL certificate, S3 bucket and Cloudfront distribution.
+
+###############################################################################
+Parameters:
+###############################################################################
+
+  StackName:
+    Type: String
+    Description: The stack name.
+    Default: example-web-prod
+
+  DomainName:
+    Type: String
+    Description: The domain name.
+    Default: webapp.example.com
+
+  AlternativeDomainName:
+    Type: String
+    Description: The domain name.
+    Default: webapp.example.com
+
+  PriceClass:
+    Type: String
+    Description: The CloudFront distribution price class
+    Default: 'PriceClass_All'
+    AllowedValues:
+      - 'PriceClass_100'
+      - 'PriceClass_200'
+      - 'PriceClass_All'
+
+###############################################################################
+Resources:
+###############################################################################
+
+  Cert:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          ValidationDomain: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Ref AlternativeDomainName
+      ValidationMethod: DNS
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref DomainName
+          - !Ref AlternativeDomainName
+        DefaultCacheBehavior:
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+          TargetOriginId: !Join ['', [!Ref StackName, '-bucket']]
+          ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: /index.html
+        Logging:
+          IncludeCookies: false
+          Bucket: !Join ['', [!Ref LogBucket, '.s3.amazonaws.com']]
+          Prefix: "cf-logs/"
+        CustomErrorResponses:
+          - ErrorCachingMinTTL: 300
+            ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCachingMinTTL: 300
+            ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        Enabled: true
+        HttpVersion: http2
+        Origins:
+          - DomainName: !Join ['', [!Ref Bucket, '.s3.amazonaws.com']]
+            Id: !Join ['', [!Ref StackName, '-bucket']]
+            S3OriginConfig:
+              OriginAccessIdentity:
+                !Join ['', ['origin-access-identity/cloudfront/', !Ref CloudFrontOriginAccessIdentity]]
+        PriceClass: !Ref PriceClass
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Cert
+          # AcmCertificateArn: arn:aws:acm:us-east-1:693819182988:certificate/ca935b57-bb6b-4e04-9353-7a6c84fe115e
+          MinimumProtocolVersion: TLSv1
+          SslSupportMethod: sni-only
+      Tags:
+        - Key: Domain
+          Value: !Ref DomainName
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub 'CloudFront OAI for ${DomainName}'
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Domain
+          Value: !Ref DomainName
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Statement:
+          - Action:
+              - s3:GetObject
+            Effect: Allow
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref Bucket, '/*']]
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Domain
+          Value: !Ref DomainName

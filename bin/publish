@@ -1,0 +1,32 @@
+#!/bin/bash
+
+if [ "$#" -ne 1 ]; then
+    echo "usage: bin/publish <env_file>"
+    exit -1
+fi
+
+source $1
+
+export DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+export CURRENT=`date +"%Y%m%d"`
+
+cd $DIR/..
+
+echo "Copying the local build to S3 bucket ("$CURRENT")"
+
+# Optionally remove everything before pushing (be careful!)
+# aws s3 --profile $AWS_PROFILE rm $S3_BUCKET --recursive
+
+aws s3 --profile $AWS_PROFILE sync $SOURCE_DIR $S3_BUCKET
+
+# Other possiblities
+# aws s3 --profile $AWS_PROFILE rm $S3_BUCKET/$CURRENT --recursive
+# aws s3 --profile $AWS_PROFILE sync $SOURCE_DIR $S3_BUCKET/$CURRENT --acl public-read
+# echo Copying to the "latest" folder...
+# aws s3 --profile $AWS_PROFILE rm $S3_BUCKET --recursive
+# aws s3 --profile $AWS_PROFILE cp  $S3_BUCKET/$CURRENT $S3_BUCKET/latest --recursive --acl public-read
+
+RET=`aws cloudfront --profile $AWS_PROFILE create-invalidation --distribution-id $CLOUDFRONT_DIST_ID --path "/*"`
+ID=`echo ${RET} | tr "," "\n" | grep Id | sed 's/.*Id\": "\([A-Z0-9]*\)"/\1/'`
+echo $RET
+aws cloudfront --profile $AWS_PROFILE wait invalidation-completed --distribution-id $CLOUDFRONT_DIST_ID --id ${ID}
