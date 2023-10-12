@@ -56,7 +56,7 @@ Update .env by filling CLOUDFRONT_DIST_ID.
 
 Publish the content and invalidate CloudFront cache:
 ```
-bin/publish .env
+bin/publish .env/prod
 ```
 
 To update the content, you just need to repeat Step 4.
